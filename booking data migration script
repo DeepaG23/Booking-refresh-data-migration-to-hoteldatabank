@@ -1,0 +1,60 @@
+import pandas as pd
+import psycopg2
+from psycopg2 import extras
+import os
+import datetime
+import pymssql
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+postgres_database = psycopg2.connect(
+    database=os.getenv('POSTGRES_DBNAME'),
+    user=os.getenv('POSTGRES_USER'),
+    password=os.getenv('POSTGRES_PASSWORD'),
+    host=os.getenv('POSTGRES_HOST'),
+    port=os.getenv('POSTGRES_PORT')
+)
+print("postgres_database Connection")
+
+
+source_cursor = postgres_database.cursor()
+#Inserts data from a table named booking_basic_data.
+insert_query = """select id,hotelid,2 as websitecode,address,city,state,country,zipcode as zip,lat,lng,1 as status,
+property_type as propertytype,review_rating as rating,dest_name as larbarterm,number_of_reviews as reviewscount,
+dtcollected as createddate,sourceurl as baseurl,hotel_chain as chainname,room_category_name as roomname,name as hotelname from booking_basic_data"""
+source_cursor.execute(insert_query)
+rows = source_cursor.fetchall()
+df = pd.DataFrame(rows, columns=[desc[0] for desc in source_cursor.description])
+print(f"finished fetching booking_data_basic table to data frame. count:{len(rows)}")
+#Closes the cursor and the connection to the PostgreSQL database.
+postgres_database.commit()
+source_cursor.close()
+postgres_database.close()
+
+# conn = pymssql.connect(host=google_db_host, port=google_db_port, database=google_db, user=google_db_uname, password=google_db_pwd)
+postgres_db = psycopg2.connect(
+    database=os.getenv('POSTGRES_DBNAME'),
+    user=os.getenv('POSTGRES_USER'),
+    password=os.getenv('POSTGRES_PASSWORD'),
+    host=os.getenv('POSTGRES_HOST'),
+    port=os.getenv('POSTGRES_PORT')
+)
+print("postgres_db Connection")
+
+
+postgres_cursor = postgres_db.cursor()
+table_name = "sourcedata"
+
+rows = []
+for row in df.itertuples(index=False, name=None):
+    cleaned_row = [None if pd.isnull(value) or value == '' else value for value in row]
+    rows.append(tuple(cleaned_row))
+columns = df.columns
+columns_str = ', '.join(columns)
+query = f"INSERT INTO {table_name} ({columns_str}) VALUES %s"
+extras.execute_values(postgres_cursor, query, rows)
+postgres_db.commit()
+postgres_cursor.close()
+postgres_db.close()
